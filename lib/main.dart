@@ -11,6 +11,7 @@ import 'src/domain/markdown_processing.dart';
 import 'src/services/app_persistence.dart';
 import 'src/services/document_service.dart';
 import 'src/services/speech_service.dart';
+import 'src/ui/theme_helpers.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -245,135 +246,131 @@ class _MarkdownViewerAppState extends State<MarkdownViewerApp> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = ThemeData(
-      colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-      useMaterial3: true,
-      fontFamily: _settings.fontFamily.windowsFontFamily,
+    final lightTheme = buildAppTheme(
+      brightness: Brightness.light,
+      settings: _settings,
+    );
+    final darkTheme = buildAppTheme(
+      brightness: Brightness.dark,
+      settings: _settings,
     );
 
     return MaterialApp(
       title: 'Markdown Viewer TTS',
       themeMode: _settings.themeMode.flutterThemeMode,
-      theme: theme,
-      darkTheme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: Colors.blue,
-          brightness: Brightness.dark,
-        ),
-        useMaterial3: true,
-        fontFamily: _settings.fontFamily.windowsFontFamily,
-      ),
+      theme: lightTheme,
+      darkTheme: darkTheme,
       home: !_initialized
           ? const Scaffold(
               body: Center(child: CircularProgressIndicator()),
             )
-          : Scaffold(
-              key: _scaffoldKey,
-              endDrawer: _buildSettingsDrawer(context),
-              appBar: AppBar(
-                title: const Text('Markdown Viewer TTS'),
-                actions: <Widget>[
-                  IconButton(
-                    tooltip: 'Reopen last document',
-                    onPressed: _documentState.getMostRecentDocument() == null
-                        ? null
-                        : () => _openRecentDocument(
-                              _documentState.getMostRecentDocument()!,
-                            ),
-                    icon: const Icon(Icons.history),
-                  ),
-                  IconButton(
-                    tooltip: 'Settings',
-                    onPressed: () => _scaffoldKey.currentState?.openEndDrawer(),
-                    icon: const Icon(Icons.tune),
-                  ),
-                ],
-              ),
-              body: Column(
-                children: <Widget>[
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                    child: Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: <Widget>[
-                        FilledButton.icon(
-                          onPressed: _openFromPicker,
-                          icon: const Icon(Icons.folder_open),
-                          label: const Text('Open file'),
-                        ),
-                        FilledButton.tonalIcon(
-                          onPressed: _document == null ? null : _toggleSpeech,
-                          icon: Icon(
-                            _isSpeaking ? Icons.stop : Icons.record_voice_over,
-                          ),
-                          label: Text(_isSpeaking ? 'Stop reading' : 'Read aloud'),
-                        ),
-                        ActionChip(
-                          label: const Text('All tags'),
-                          avatar: _selectedTag == null
-                              ? const Icon(Icons.check, size: 18)
-                              : null,
-                          onPressed: () {
-                            setState(() {
-                              _selectedTag = null;
-                            });
-                          },
-                        ),
-                        ..._tags.map(
-                          (tag) => FilterChip(
-                            label: Text('#$tag'),
-                            selected: _selectedTag == tag,
-                            onSelected: (_) {
-                              setState(() {
-                                _selectedTag = _selectedTag == tag ? null : tag;
-                              });
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  if (_document != null)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: Text(
-                          _document!.title,
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                      ),
-                    ),
-                  const SizedBox(height: 8),
-                  Expanded(
-                    child: Markdown(
-                      data: _visibleMarkdown,
-                      controller: _scrollController,
-                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-                      selectable: true,
-                      onTapLink: _openLink,
-                      styleSheet:
-                          MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
-                        p: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                              fontSize: _settings.fontSize,
-                              height: 1.5,
-                            ),
-                        code: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              fontSize: _settings.fontSize - 1,
-                              fontFamily:
-                                  ReaderFontFamily.monospace.windowsFontFamily,
-                            ),
-                        tableBody:
-                            Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                  fontSize: _settings.fontSize,
+          : Builder(
+              builder: (context) {
+                final theme = Theme.of(context);
+                return Scaffold(
+                  key: _scaffoldKey,
+                  endDrawer: _buildSettingsDrawer(context),
+                  appBar: AppBar(
+                    title: const Text('Markdown Viewer TTS'),
+                    actions: <Widget>[
+                      IconButton(
+                        tooltip: 'Reopen last document',
+                        onPressed: _documentState.getMostRecentDocument() == null
+                            ? null
+                            : () => _openRecentDocument(
+                                  _documentState.getMostRecentDocument()!,
                                 ),
+                        icon: const Icon(Icons.history),
                       ),
-                    ),
+                      IconButton(
+                        tooltip: 'Settings',
+                        onPressed: () =>
+                            _scaffoldKey.currentState?.openEndDrawer(),
+                        icon: const Icon(Icons.tune),
+                      ),
+                    ],
                   ),
-                ],
-              ),
+                  body: Column(
+                    children: <Widget>[
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                        child: Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: <Widget>[
+                            FilledButton.icon(
+                              onPressed: _openFromPicker,
+                              icon: const Icon(Icons.folder_open),
+                              label: const Text('Open file'),
+                            ),
+                            FilledButton.tonalIcon(
+                              onPressed:
+                                  _document == null ? null : _toggleSpeech,
+                              icon: Icon(
+                                _isSpeaking
+                                    ? Icons.stop
+                                    : Icons.record_voice_over,
+                              ),
+                              label: Text(
+                                _isSpeaking ? 'Stop reading' : 'Read aloud',
+                              ),
+                            ),
+                            ActionChip(
+                              label: const Text('All tags'),
+                              avatar: _selectedTag == null
+                                  ? const Icon(Icons.check, size: 18)
+                                  : null,
+                              onPressed: () {
+                                setState(() {
+                                  _selectedTag = null;
+                                });
+                              },
+                            ),
+                            ..._tags.map(
+                              (tag) => FilterChip(
+                                label: Text('#$tag'),
+                                selected: _selectedTag == tag,
+                                onSelected: (_) {
+                                  setState(() {
+                                    _selectedTag =
+                                        _selectedTag == tag ? null : tag;
+                                  });
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (_document != null)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              _document!.title,
+                              style: theme.textTheme.titleMedium,
+                            ),
+                          ),
+                        ),
+                      const SizedBox(height: 8),
+                      Expanded(
+                        child: Markdown(
+                          data: _visibleMarkdown,
+                          controller: _scrollController,
+                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                          selectable: true,
+                          onTapLink: _openLink,
+                          styleSheet: buildMarkdownStyleSheet(
+                            theme,
+                            _settings,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
             ),
     );
   }
