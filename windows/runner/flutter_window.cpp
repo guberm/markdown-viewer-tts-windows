@@ -1,8 +1,10 @@
 #include "flutter_window.h"
 
 #include <optional>
+#include <shellapi.h>
 
 #include "flutter/generated_plugin_registrant.h"
+#include "utils.h"
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
     : project_(project) {}
@@ -27,6 +29,14 @@ bool FlutterWindow::OnCreate() {
   RegisterPlugins(flutter_controller_->engine());
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
+  file_open_channel_ =
+      std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
+          flutter_controller_->engine()->messenger(),
+          "dev.guber.markdown_viewer_tts_windows/file_open",
+          &flutter::StandardMethodCodec::GetInstance());
+
+  DragAcceptFiles(GetHandle(), TRUE);
+
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
     this->Show();
   });
@@ -40,11 +50,24 @@ bool FlutterWindow::OnCreate() {
 }
 
 void FlutterWindow::OnDestroy() {
+  DragAcceptFiles(GetHandle(), FALSE);
+  file_open_channel_.reset();
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
   }
 
   Win32Window::OnDestroy();
+}
+
+void FlutterWindow::SendOpenFileToFlutter(const std::string& path) {
+  if (!file_open_channel_) {
+    return;
+  }
+
+  file_open_channel_->InvokeMethod(
+    "openFile",
+    std::make_unique<flutter::EncodableValue>(path)
+  );
 }
 
 LRESULT
@@ -65,6 +88,20 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
     case WM_FONTCHANGE:
       flutter_controller_->engine()->ReloadSystemFonts();
       break;
+    case WM_DROPFILES: {
+      HDROP drop = reinterpret_cast<HDROP>(wparam);
+      const UINT file_count = DragQueryFileW(drop, 0xFFFFFFFF, nullptr, 0);
+      for (UINT i = 0; i < file_count; ++i) {
+        wchar_t path[MAX_PATH];
+        const UINT copied = DragQueryFileW(drop, i, path, MAX_PATH);
+        if (copied > 0) {
+          SendOpenFileToFlutter(Utf8FromUtf16(path));
+          break;
+        }
+      }
+      DragFinish(drop);
+      return 0;
+    }
   }
 
   return Win32Window::MessageHandler(hwnd, message, wparam, lparam);

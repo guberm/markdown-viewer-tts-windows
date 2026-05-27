@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -16,19 +18,54 @@ import 'src/ui/theme_helpers.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final preferences = await SharedPreferences.getInstance();
-  runApp(MarkdownViewerApp(preferences: preferences));
+  final startupDocumentPath = resolveStartupDocumentPath(
+    Platform.executableArguments,
+  );
+  runApp(
+    MarkdownViewerApp(
+      preferences: preferences,
+      startupDocumentPath: startupDocumentPath,
+    ),
+  );
+}
+
+String? resolveStartupDocumentPath(List<String> arguments) {
+  for (final argument in arguments) {
+    final trimmed = argument.trim();
+    if (trimmed.isEmpty) {
+      continue;
+    }
+
+    final file = File(trimmed);
+    final extension = file.path.split('.').last.toLowerCase();
+    final isSupported = <String>{'md', 'markdown', 'txt'}.contains(extension);
+    if (isSupported && file.existsSync()) {
+      return file.path;
+    }
+  }
+
+  return null;
 }
 
 class MarkdownViewerApp extends StatefulWidget {
-  const MarkdownViewerApp({super.key, this.preferences});
+  const MarkdownViewerApp({
+    super.key,
+    this.preferences,
+    this.startupDocumentPath,
+  });
 
   final SharedPreferences? preferences;
+  final String? startupDocumentPath;
 
   @override
   State<MarkdownViewerApp> createState() => _MarkdownViewerAppState();
 }
 
 class _MarkdownViewerAppState extends State<MarkdownViewerApp> {
+  static const MethodChannel _fileOpenChannel = MethodChannel(
+    'dev.guber.markdown_viewer_tts_windows/file_open',
+  );
+
   final ScrollController _scrollController = ScrollController();
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final DocumentService _documentService = DocumentService();
@@ -48,10 +85,11 @@ class _MarkdownViewerAppState extends State<MarkdownViewerApp> {
   void initState() {
     super.initState();
     _scrollController.addListener(_persistScrollPosition);
+    _fileOpenChannel.setMethodCallHandler(_handlePlatformMethodCall);
 
     if (widget.preferences != null) {
       _applyPersistence(AppPersistence(widget.preferences!));
-      unawaited(_restoreLastDocument());
+      unawaited(_restoreInitialDocument());
     } else {
       unawaited(_initializeAsync());
     }
@@ -64,7 +102,7 @@ class _MarkdownViewerAppState extends State<MarkdownViewerApp> {
     }
 
     _applyPersistence(AppPersistence(preferences));
-    await _restoreLastDocument();
+    await _restoreInitialDocument();
   }
 
   void _applyPersistence(AppPersistence persistence) {
@@ -78,11 +116,22 @@ class _MarkdownViewerAppState extends State<MarkdownViewerApp> {
 
   @override
   void dispose() {
+    _fileOpenChannel.setMethodCallHandler(null);
     _scrollController
       ..removeListener(_persistScrollPosition)
       ..dispose();
     unawaited(_speechService.stop());
     super.dispose();
+  }
+
+  Future<void> _restoreInitialDocument() async {
+    final startupPath = widget.startupDocumentPath;
+    if (startupPath != null && startupPath.isNotEmpty) {
+      await _openDocumentPath(startupPath, reopen: false);
+      return;
+    }
+
+    await _restoreLastDocument();
   }
 
   Future<void> _restoreLastDocument() async {
@@ -91,6 +140,19 @@ class _MarkdownViewerAppState extends State<MarkdownViewerApp> {
       return;
     }
     await _openDocumentPath(recent.path, reopen: true);
+  }
+
+  Future<void> _handlePlatformMethodCall(MethodCall call) async {
+    if (call.method != 'openFile') {
+      return;
+    }
+
+    final path = call.arguments is String ? call.arguments as String : null;
+    if (path == null || path.trim().isEmpty) {
+      return;
+    }
+
+    await _openDocumentPath(path);
   }
 
   Future<void> _openFromPicker() async {
