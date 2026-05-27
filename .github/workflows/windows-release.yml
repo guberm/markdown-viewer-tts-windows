@@ -72,6 +72,7 @@ jobs:
           tag_name: ${{ inputs.tag }}
           name: ${{ inputs.tag }}
           generate_release_notes: true
+          overwrite_files: true
           files: |
             build/windows/installer/MarkdownViewerTTS-${{ inputs.tag }}-windows-x64-setup.exe
             build/windows/portable/MarkdownViewerTTS-${{ inputs.tag }}-windows-x64-portable.zip
