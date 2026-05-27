@@ -1,0 +1,77 @@
+name: windows-release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag, for example v1.0.0
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Enable Windows desktop
+        run: flutter config --enable-windows-desktop
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Test
+        run: flutter test
+
+      - name: Build Windows app
+        run: flutter build windows
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup -y --no-progress
+
+      - name: Prepare portable bundle
+        shell: pwsh
+        run: |
+          $tag = '${{ inputs.tag }}'
+          $portableDir = "build/windows/portable/MarkdownViewerTTS-$tag-windows-x64"
+          New-Item -ItemType Directory -Force -Path $portableDir | Out-Null
+          Copy-Item -Recurse -Force build/windows/x64/runner/Release/* $portableDir
+          Compress-Archive -Path "$portableDir/*" -DestinationPath "build/windows/portable/MarkdownViewerTTS-$tag-windows-x64-portable.zip" -Force
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          $tag = '${{ inputs.tag }}'
+          $version = $tag.TrimStart('v')
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/DMyAppVersion=$version" windows\installer.iss
+
+      - name: Rename installer for release asset
+        shell: pwsh
+        run: |
+          $tag = '${{ inputs.tag }}'
+          $version = $tag.TrimStart('v')
+          Move-Item -Force "build/windows/installer/MarkdownViewerTTS-Setup-$version.exe" "build/windows/installer/MarkdownViewerTTS-$tag-windows-x64-setup.exe"
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag }}
+          name: ${{ inputs.tag }}
+          generate_release_notes: true
+          files: |
+            build/windows/installer/MarkdownViewerTTS-${{ inputs.tag }}-windows-x64-setup.exe
+            build/windows/portable/MarkdownViewerTTS-${{ inputs.tag }}-windows-x64-portable.zip
